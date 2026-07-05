@@ -79,15 +79,19 @@
 
   /* ---- 快捷問題 ---- */
   #quick-questions {
-    display: flex; gap: 9px; overflow-x: auto; padding: 12px 14px;
+    display: flex; gap: 9px; overflow-x: auto; padding: 12px 20px;
     background: rgba(255,255,255,0.92); border-bottom: 1px solid var(--line);
     -webkit-overflow-scrolling: touch;
     scrollbar-width: thin;
+    scroll-snap-type: x proximity;
+    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 20px, #000 calc(100% - 20px), transparent 100%);
+    mask-image: linear-gradient(to right, transparent 0, #000 20px, #000 calc(100% - 20px), transparent 100%);
   }
   .chip {
     flex: 0 0 auto; background: var(--accent-bg); color: var(--primary);
     border: 1px solid #c2d7ea; border-radius: 999px; padding: 8px 14px;
     font-size: 15px; white-space: nowrap; cursor: pointer;
+    scroll-snap-align: start;
   }
   .chip:active { background: #dcebf7; }
 
@@ -104,22 +108,47 @@
   .bubble.user { background: var(--primary); color: #fff; border-bottom-right-radius: 4px; }
   .bubble.system { background: #fff; color: var(--text); border: 1px solid #edf1f5; border-bottom-left-radius: 4px; }
   .bubble .tag { color: #1a6fd4; background: #e3edfb; padding: 0 4px; border-radius: 4px; font-weight: 600; }
-  .bubble .contact-line { margin-top: 8px; font-size: 15px; color: var(--muted); }
+  .bubble .contact-line { margin-top: 10px; font-size: 15px; color: var(--muted); }
+
+  /* 復答徒章：徽章、內文分成狜立區塊，避免徽章與文字黏在一起 */
+  .answer-badges { display: block; margin-bottom: 10px; }
+  .answer-badges:empty { display: none; margin-bottom: 0; }
   .answer-badge {
     display: inline-block; font-size: 13px; font-weight: 600; padding: 3px 10px;
-    border-radius: 999px; margin-bottom: 8px;
+    border-radius: 999px; margin: 0 6px 6px 0;
   }
   .answer-badge.verified { background: #e4f5e8; color: var(--success); }
   .answer-badge.structured { background: #e3edfb; color: #1a6fd4; }
   .answer-badge.generated { background: #fff4e0; color: #9b5b08; }
   .answer-badge.demo { background: #fde8e6; color: var(--danger); }
 
+  .answer-body .answer-para { margin: 0 0 10px; }
+  .answer-body .answer-para:last-child { margin-bottom: 0; }
+  .answer-sections { display: flex; flex-direction: column; gap: 10px; }
+  .answer-section { display: flex; gap: 8px; align-items: flex-start; }
+  .section-label {
+    flex: 0 0 auto; font-size: 13px; font-weight: 700; padding: 3px 10px; border-radius: 999px;
+    background: var(--accent-bg); color: var(--primary); white-space: nowrap; margin-top: 1px;
+  }
+  .section-label.label-出處 { background: #eaf5ec; color: var(--success); }
+  .section-body { flex: 1; min-width: 0; }
+  .page-anchor {
+    display: inline-block; font-size: 13px; color: var(--muted); background: #f3f6f9;
+    border: 1px solid var(--line); border-radius: 6px; padding: 1px 7px; margin: 0 2px;
+  }
+
   .sources { max-width: 85%; display: flex; flex-direction: column; gap: 8px; margin-top: -4px; }
   .source-card {
     background: #fff; border: 1px solid var(--line); border-radius: var(--radius);
     padding: 10px 14px; font-size: 15px; box-shadow: 0 4px 14px rgba(21, 42, 62, 0.06);
   }
-  .source-card .src-title { font-weight: 600; }
+  .source-card .src-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; flex-wrap: wrap; }
+  .source-card .src-id {
+    flex: 0 0 auto; font-size: 13px; font-weight: 700; color: var(--primary);
+    background: var(--accent-bg); border-radius: 999px; padding: 2px 10px;
+  }
+  .source-card .src-bureau { flex: 0 0 auto; font-size: 13px; color: var(--muted); }
+  .source-card .src-title { color: var(--muted); font-size: 14px; line-height: 1.5; }
   .source-card .attach-btn {
     display: inline-block; margin-top: 6px; margin-right: 6px;
     background: var(--accent-bg); color: var(--primary); border: 1px solid #c7d9ef;
@@ -271,8 +300,37 @@
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
-  function highlightTags(text) {
-    return escapeHtml(text).replace(/【([^】]+)】/g, '<span class="tag">【$1】</span>');
+  function decorateInline(text) {
+    var escaped = escapeHtml(text);
+    escaped = escaped.replace(/（紙本頁碼[：:][^）]*）/g, function (m) {
+      return '<span class="page-anchor">' + m.replace(/[（）]/g, '') + '</span>';
+    });
+    escaped = escaped.replace(/【([^】]+)】/g, '<span class="tag">【$1】</span>');
+    return escaped;
+  }
+
+  /**
+   * 將後端回覆文字排版：
+   * - 若包含「結論：/依據：/出處：」三段式標籤，分段顯示並加上彩色標籤
+   * - 否則依段落分別包裝，避免一大塊文字雜在一起
+   */
+  function formatAnswerHtml(rawText) {
+    var lines = String(rawText || '').split(/\n+/).map(function (l) { return l.trim(); }).filter(Boolean);
+    if (!lines.length) return '';
+    var sectionRe = /^(結論|依據|出處)[：:]\s*(.*)$/;
+    var sections = [];
+    var plain = [];
+    lines.forEach(function (line) {
+      var m = line.match(sectionRe);
+      if (m) sections.push({ label: m[1], body: m[2] }); else plain.push(line);
+    });
+    if (sections.length) {
+      return '<div class="answer-sections">' + sections.map(function (s) {
+        return '<div class="answer-section"><span class="section-label label-' + s.label + '">' + s.label + '</span>' +
+          '<span class="section-body">' + decorateInline(s.body) + '</span></div>';
+      }).join('') + '</div>';
+    }
+    return plain.map(function (p) { return '<p class="answer-para">' + decorateInline(p) + '</p>'; }).join('');
   }
 
   function addUserBubble(text) {
@@ -305,10 +363,25 @@
     sources.forEach(function (s) {
       var card = document.createElement('div');
       card.className = 'source-card';
-      var title = document.createElement('div');
-      title.className = 'src-title';
-      title.textContent = '📄 ' + s.id + ' ' + (s.title || '') + (s.bureau ? '（' + s.bureau + '）' : '');
-      card.appendChild(title);
+      var head = document.createElement('div');
+      head.className = 'src-head';
+      var idBadge = document.createElement('span');
+      idBadge.className = 'src-id';
+      idBadge.textContent = '📄 ' + s.id;
+      head.appendChild(idBadge);
+      if (s.bureau) {
+        var bureau = document.createElement('span');
+        bureau.className = 'src-bureau';
+        bureau.textContent = s.bureau;
+        head.appendChild(bureau);
+      }
+      card.appendChild(head);
+      if (s.title) {
+        var title = document.createElement('div');
+        title.className = 'src-title';
+        title.textContent = s.title;
+        card.appendChild(title);
+      }
       (s.attachments || []).forEach(function (a) {
         if (!a.url) return;
         var btn = document.createElement('a');
@@ -381,13 +454,14 @@
 
   function renderAnswer(data) {
     var demoNotice = hasDemoSource(data.sources)
-      ? '<div class="answer-badge demo">目前後端仍連到 DEMO 示範資料，請先匯入正式 Google Sheet 後再使用</div>'
+      ? '<span class="answer-badge demo">目前後端仍連到 DEMO 示範資料，請先匯入正式 Google Sheet 後再使用</span>'
       : '';
-    var html = demoNotice + answerBadgeHtml(data.answerType) + highlightTags(data.answer || '');
-    if (data.answerType === 'none' && data.contact) {
-      html += '<div class="contact-line">📞 建議洽詢：' + escapeHtml(data.contact) + '</div>';
-    }
-    addSystemBubble(html);
+    var badges = '<div class="answer-badges">' + demoNotice + answerBadgeHtml(data.answerType) + '</div>';
+    var body = '<div class="answer-body">' + formatAnswerHtml(data.answer || '') + '</div>';
+    var contact = (data.answerType === 'none' && data.contact)
+      ? '<div class="contact-line">📞 建議洽詢：' + escapeHtml(data.contact) + '</div>'
+      : '';
+    addSystemBubble(badges + body + contact);
     addSourceCards(data.sources);
   }
 
