@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>缺失改進追蹤儀表板｜動員準備業務訪評</title>
+<style>
+  :root {
+    --primary: #17517f;
+    --primary-dark: #103a5e;
+    --accent: #a85d1a;
+    --accent-bg: #eef5fb;
+    --surface: #ffffff;
+    --surface-soft: #f7f3ea;
+    --line: #d6e1eb;
+    --text: #16202a;
+    --muted: #5d6b78;
+    --success: #1f7a4d;
+    --danger: #b42318;
+    --shadow: 0 12px 32px rgba(20, 43, 67, 0.1);
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    font-family: "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", sans-serif;
+    background:
+      linear-gradient(180deg, rgba(23, 81, 127, 0.08), rgba(247, 243, 234, 0.34) 42%, #f6f8fa),
+      #f6f8fa;
+    color: var(--text); font-size: 17px; line-height: 1.6;
+  }
+  header { background: linear-gradient(135deg, var(--primary), #26709f); color: #fff; padding: 16px; box-shadow: 0 2px 14px rgba(16, 58, 94, 0.18); }
+  .masthead { max-width: 1040px; margin: 0 auto; display: flex; align-items: center; gap: 12px; }
+  .emblem-mark {
+    flex: 0 0 46px; height: 46px; border: 2px solid rgba(255,255,255,0.76);
+    border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font-weight: 800; background: rgba(255,255,255,0.12);
+  }
+  header .title { font-size: 19px; font-weight: 700; }
+  header .subtitle { font-size: 14px; margin-top: 4px; opacity: 0.9; }
+
+  #gate {
+    padding: 34px 18px; display: flex; flex-direction: column; align-items: center; gap: 16px;
+  }
+  .gate-card {
+    width: min(100%, 420px); background: var(--surface); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 24px 22px; box-shadow: var(--shadow);
+    display: flex; flex-direction: column; align-items: center; gap: 14px;
+  }
+  .gate-title { color: var(--primary); font-size: 20px; font-weight: 800; }
+  #gate p { margin: 0; text-align: center; color: var(--muted); }
+  #gate input {
+    font-size: 20px; padding: 12px; width: 200px; text-align: center;
+    letter-spacing: 4px; border: 2px solid var(--primary); border-radius: var(--radius); background: #fbfdff;
+  }
+  #gate button, .tool-btn {
+    background: var(--primary); color: #fff; border: none; border-radius: var(--radius);
+    padding: 12px 20px; font-size: 16px; font-weight: 700; cursor: pointer;
+    box-shadow: 0 5px 12px rgba(23, 81, 127, 0.16);
+  }
+  #gate button:disabled, .tool-btn:disabled { background: #9fb3c8; cursor: not-allowed; box-shadow: none; }
+  .tool-btn.secondary { background: #fff; color: var(--primary); border: 1px solid #c2d7ea; box-shadow: none; }
+  #gate-error { color: var(--danger); font-size: 15px; min-height: 22px; text-align: center; }
+
+  #content { max-width: 1040px; margin: 0 auto; padding: 16px; display: none; }
+  #content.show { display: block; }
+
+  .summary-row {
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 14px; margin-bottom: 16px; box-shadow: var(--shadow);
+    display: flex; gap: 12px; align-items: center; justify-content: space-between;
+  }
+  #stats {
+    font-size: 18px; font-weight: 800; color: var(--primary);
+  }
+  #stats .stats-sub { color: var(--muted); display: block; font-size: 14px; font-weight: 500; margin-top: 2px; }
+  .summary-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+  .progress-track { height: 8px; background: #edf1f5; border-radius: 999px; overflow: hidden; margin-top: 8px; max-width: 360px; }
+  .progress-bar { height: 100%; width: 0; background: linear-gradient(90deg, var(--success), #64a87f); }
+
+  .table-grid {
+    display: grid; gap: 14px;
+  }
+
+  .table-block {
+    background: #fff; border: 1px solid var(--line); border-radius: var(--radius);
+    box-shadow: 0 6px 22px rgba(21, 42, 62, 0.08); overflow: hidden;
+  }
+  .table-block h2 {
+    background: linear-gradient(90deg, var(--accent-bg), #fff); color: var(--primary);
+    margin: 0; padding: 10px 16px; font-size: 17px; border-bottom: 1px solid var(--line);
+  }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #eee; font-size: 15px; vertical-align: top; }
+  th { background: #fafafa; font-size: 14px; color: var(--muted); }
+  tbody tr:last-child td { border-bottom: 0; }
+  td.status-ok { color: var(--success); font-weight: 700; }
+  td.status-pending { color: var(--danger); font-weight: 700; }
+  .evidence-link {
+    color: var(--primary); text-decoration: underline; background: transparent; border: 0;
+    padding: 0; font: inherit; cursor: pointer;
+  }
+
+  .loading, .empty, .error { text-align: center; padding: 24px; color: #777; }
+  .retry-btn {
+    background: var(--primary); color: #fff; border: none; border-radius: var(--radius);
+    padding: 10px 20px; font-size: 16px; cursor: pointer; margin-top: 8px;
+  }
+
+  footer { text-align: center; font-size: 13px; color: var(--muted); padding: 14px; }
+
+  @media (max-width: 720px) {
+    .summary-row { align-items: stretch; flex-direction: column; }
+    .summary-actions { justify-content: stretch; }
+    .tool-btn { flex: 1; }
+    table, thead, tbody, tr, th, td { display: block; }
+    thead { display: none; }
+    tr { padding: 10px 12px; border-bottom: 1px solid #edf1f5; }
+    tr:last-child { border-bottom: 0; }
+    td { border-bottom: 0; padding: 5px 0 8px; }
+    td::before {
+      content: attr(data-label); display: block; color: var(--muted); font-size: 13px; font-weight: 700;
+      margin-bottom: 2px;
+    }
+  }
+
+  @media print {
+    header .subtitle, .retry-btn, .summary-actions, #gate { display: none !important; }
+    body { background: #fff; }
+    .table-block { box-shadow: none; border: 1px solid #ccc; break-inside: avoid; }
+    .summary-row { box-shadow: none; border: 1px solid #ccc; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="masthead">
+    <div class="emblem-mark" aria-hidden="true">桃</div>
+    <div>
+      <div class="title">缺失改進追蹤儀表板</div>
+      <div class="subtitle">動員準備業務訪評｜8大表缺失改進對照</div>
+    </div>
+  </div>
+</header>
+
+<div id="gate">
+  <div class="gate-card">
+    <div class="gate-title">缺失改進追蹤</div>
+    <p>請輸入通行碼以檢視儀表板</p>
+    <input id="passcode-input" type="tel" inputmode="numeric" maxlength="6" placeholder="通行碼" aria-label="通行碼" autocomplete="one-time-code">
+    <button id="gate-submit">進入</button>
+    <div id="gate-error" aria-live="polite"></div>
+  </div>
+</div>
+
+<div id="content">
+  <div class="summary-row">
+    <div id="stats">載入中…</div>
+    <div class="summary-actions">
+      <button type="button" class="tool-btn secondary" id="reload-btn">重新整理</button>
+      <button type="button" class="tool-btn" id="print-btn">列印</button>
+    </div>
+  </div>
+  <div id="blocks" class="table-grid"></div>
+</div>
+
+<footer>本系統由民政局建置｜回覆內容以紙本卷宗為準</footer>
+
+<script>
+(function () {
+  'use strict';
+
+  // ==== 部署時請把下面這行換成你的 GAS Web App URL ====
+  var GAS_URL = 'https://script.google.com/macros/s/AKfycby0VJPC8jWejA4pQxSQsGYBxiGwIZKIb13fghpf_MexCRI-EXmiBUFD2uUcCZGJRZV_/exec';
+
+  var TABLE_ORDER = ['全動', '精神', '人力', '物資', '交通', '衛生', '科技', '軍事'];
+
+  var gateEl = document.getElementById('gate');
+  var gateError = document.getElementById('gate-error');
+  var passcodeInput = document.getElementById('passcode-input');
+  var gateSubmit = document.getElementById('gate-submit');
+  var contentEl = document.getElementById('content');
+  var statsEl = document.getElementById('stats');
+  var blocksEl = document.getElementById('blocks');
+  var reloadBtn = document.getElementById('reload-btn');
+  var printBtn = document.getElementById('print-btn');
+  var activePasscode = '';
+  var activeSessionId = '';
+
+  function callApi(body) {
+    return fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify(body)
+    }).then(function (res) {
+      if (!res.ok) throw new Error('http-error');
+      return res.json();
+    });
+  }
+
+  function escapeHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function renderDashboard(items) {
+    var total = items.length;
+    var improved = items.filter(function (i) { return String(i.improved).toUpperCase() === 'Y'; }).length;
+    var pct = total ? Math.round((improved / total) * 100) : 0;
+    statsEl.innerHTML = '缺失共 ' + total + ' 項｜已改善 ' + improved + ' 項' +
+      '<span class="stats-sub">改善完成率 ' + pct + '%</span>' +
+      '<div class="progress-track" aria-hidden="true"><div class="progress-bar" style="width:' + pct + '%"></div></div>';
+
+    blocksEl.innerHTML = '';
+    if (!total) {
+      blocksEl.innerHTML = '<div class="empty">目前尚無缺失改進資料。</div>';
+      return;
+    }
+
+    var byTable = {};
+    items.forEach(function (i) {
+      var t = i.table || '未分類';
+      if (!byTable[t]) byTable[t] = [];
+      byTable[t].push(i);
+    });
+
+    var orderedTables = TABLE_ORDER.filter(function (t) { return byTable[t]; })
+      .concat(Object.keys(byTable).filter(function (t) { return TABLE_ORDER.indexOf(t) === -1; }));
+
+    orderedTables.forEach(function (t) {
+      var block = document.createElement('div');
+      block.className = 'table-block';
+      var rowsHtml = byTable[t].map(function (i) {
+        var isImproved = String(i.improved).toUpperCase() === 'Y';
+        var evidence = i.evidence
+          ? (i.sourceId
+            ? '<button type="button" class="evidence-link" data-source-id="' + escapeHtml(i.sourceId) + '">' + escapeHtml(i.evidence) + '（查看）</button>'
+            : escapeHtml(i.evidence))
+          : '（無）';
+        return '<tr>' +
+          '<td data-label="上次委員意見">' + escapeHtml(i.issue) + '</td>' +
+          '<td data-label="本次改進情形" class="' + (isImproved ? 'status-ok' : 'status-pending') + '">' + escapeHtml(i.improvement) + '</td>' +
+          '<td data-label="佐證（文號）">' + evidence + '</td>' +
+          '</tr>';
+      }).join('');
+
+      block.innerHTML = '<h2>' + escapeHtml(t) + '</h2>' +
+        '<table><thead><tr><th>上次委員意見</th><th>本次改進情形</th><th>佐證（文號）</th></tr></thead>' +
+        '<tbody>' + rowsHtml + '</tbody></table>';
+      blocksEl.appendChild(block);
+    });
+  }
+
+  function loadDashboard(passcode, sessionId) {
+    reloadBtn.disabled = true;
+    statsEl.textContent = '載入中…';
+    blocksEl.innerHTML = '';
+    callApi({ action: 'dashboard', passcode: passcode, sessionId: sessionId })
+      .then(function (data) {
+        reloadBtn.disabled = false;
+        if (!data.ok) {
+          blocksEl.innerHTML = '<div class="error">' + escapeHtml(data.message || '資料載入失敗，請洽工作人員。') + '</div>';
+          statsEl.textContent = '';
+          return;
+        }
+        renderDashboard(data.items || []);
+      })
+      .catch(function () {
+        reloadBtn.disabled = false;
+        statsEl.textContent = '';
+        blocksEl.innerHTML = '<div class="error">系統暫時無法連線，請洽工作人員或參閱紙本卷宗。' +
+          '<br><button class="retry-btn" id="retry-btn">重試</button></div>';
+        var retryBtn = document.getElementById('retry-btn');
+        if (retryBtn) retryBtn.addEventListener('click', function () { loadDashboard(passcode, sessionId); });
+      });
+  }
+
+  function getSessionId() {
+    var sid = sessionStorage.getItem('sessionId');
+    if (!sid) {
+      sid = (window.crypto && crypto.randomUUID) ? crypto.randomUUID()
+        : ('sid-' + Date.now() + '-' + Math.random().toString(16).slice(2));
+      sessionStorage.setItem('sessionId', sid);
+    }
+    return sid;
+  }
+
+  var failCount = 0;
+  var lockUntil = 0;
+
+  function tryEnter() {
+    var now = Date.now();
+    if (now < lockUntil) {
+      var secs = Math.ceil((lockUntil - now) / 1000);
+      gateError.textContent = '嘗試次數過多，請等待 ' + secs + ' 秒後再試。';
+      return;
+    }
+    var code = passcodeInput.value.trim();
+    if (!code) { gateError.textContent = '請輸入通行碼。'; return; }
+
+    if (!GAS_URL || GAS_URL.indexOf('PASTE_YOUR_GAS_WEB_APP_URL_HERE') !== -1) {
+      gateError.textContent = '系統尚未設定後端連線位址，請洽系統管理者完成部署設定。';
+      return;
+    }
+
+    gateSubmit.disabled = true;
+    gateError.textContent = '驗證中…';
+    var sid = getSessionId();
+    callApi({ action: 'verify', passcode: code, sessionId: sid })
+      .then(function (data) {
+        gateSubmit.disabled = false;
+        if (!data.ok) {
+          failCount++;
+          gateError.textContent = '通行碼錯誤（' + failCount + '/3）。';
+          if (failCount >= 3) {
+            lockUntil = Date.now() + 60000;
+            gateError.textContent = '嘗試次數過多，請等待 60 秒後再試。';
+            failCount = 0;
+          }
+          return;
+        }
+        if (data.maintenance) {
+          gateError.textContent = data.announcement || '系統維護中，請稍後再試。';
+          return;
+        }
+        activePasscode = code;
+        activeSessionId = sid;
+        gateEl.style.display = 'none';
+        contentEl.classList.add('show');
+        loadDashboard(code, sid);
+      })
+      .catch(function () {
+        gateSubmit.disabled = false;
+        gateError.textContent = '系統暫時無法連線，請洽工作人員或參閱紙本卷宗。';
+      });
+  }
+
+  gateSubmit.addEventListener('click', tryEnter);
+  passcodeInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') tryEnter(); });
+  reloadBtn.addEventListener('click', function () {
+    if (activePasscode && activeSessionId) loadDashboard(activePasscode, activeSessionId);
+  });
+  printBtn.addEventListener('click', function () { window.print(); });
+  blocksEl.addEventListener('click', function (e) {
+    var link = e.target.closest('.evidence-link');
+    if (!link) return;
+    var sourceId = link.getAttribute('data-source-id');
+    var question = sourceId ? '請提供' + sourceId + '的佐證資料與附件' : '請提供佐證資料與附件';
+    window.open('index.html?q=' + encodeURIComponent(question), '_blank', 'noopener');
+  });
+})();
+</script>
+</body>
+</html>
