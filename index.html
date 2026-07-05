@@ -112,6 +112,7 @@
   .answer-badge.verified { background: #e4f5e8; color: var(--success); }
   .answer-badge.structured { background: #e3edfb; color: #1a6fd4; }
   .answer-badge.generated { background: #fff4e0; color: #9b5b08; }
+  .answer-badge.demo { background: #fde8e6; color: var(--danger); }
 
   .sources { max-width: 85%; display: flex; flex-direction: column; gap: 8px; margin-top: -4px; }
   .source-card {
@@ -372,8 +373,17 @@
     return '';
   }
 
+  function hasDemoSource(sources) {
+    return (sources || []).some(function (source) {
+      return String(source.id || '').indexOf('DEMO-') === 0 || String(source.title || '').indexOf('示範') !== -1;
+    });
+  }
+
   function renderAnswer(data) {
-    var html = answerBadgeHtml(data.answerType) + highlightTags(data.answer || '');
+    var demoNotice = hasDemoSource(data.sources)
+      ? '<div class="answer-badge demo">目前後端仍連到 DEMO 示範資料，請先匯入正式 Google Sheet 後再使用</div>'
+      : '';
+    var html = demoNotice + answerBadgeHtml(data.answerType) + highlightTags(data.answer || '');
     if (data.answerType === 'none' && data.contact) {
       html += '<div class="contact-line">📞 建議洽詢：' + escapeHtml(data.contact) + '</div>';
     }
