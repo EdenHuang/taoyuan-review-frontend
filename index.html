@@ -311,6 +311,8 @@
   var sessionId = null;
   var passcode = null;
   var waiting = false;
+  // 最近對話（供後端理解「好」「那民防呢」這類接續追問），只留最後 3 輪
+  var chatHistory = [];
   var failCount = 0;
   var lockUntil = 0;
   var pendingQuestion = getQueryQuestion();
@@ -685,7 +687,7 @@
       }
     }, 8000);
 
-    callApi({ action: 'ask', passcode: passcode, sessionId: sessionId, question: text })
+    callApi({ action: 'ask', passcode: passcode, sessionId: sessionId, question: text, history: chatHistory })
       .then(function (data) {
         clearTimeout(slowTimer);
         removeTypingIndicator();
@@ -695,6 +697,10 @@
           return;
         }
         renderAnswer(data);
+        if (data.answerType !== 'error') {
+          chatHistory.push({ q: text, a: String(data.answer || '').slice(0, 600) });
+          if (chatHistory.length > 3) chatHistory.shift();
+        }
       })
       .catch(function () {
         clearTimeout(slowTimer);
