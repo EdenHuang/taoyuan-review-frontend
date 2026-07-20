@@ -155,6 +155,49 @@
     border-radius: 8px; padding: 6px 10px; font-size: 14px; cursor: pointer; text-decoration: none;
   }
 
+  .source-card .src-page {
+    flex: 0 0 auto; font-size: 13px; color: #6b5313; background: #fdf3d8;
+    border-radius: 999px; padding: 2px 10px; font-weight: 600;
+  }
+  .source-card .view-btn {
+    display: inline-block; margin-top: 6px; margin-right: 6px;
+    background: var(--primary); color: #fff; border: none;
+    border-radius: 8px; padding: 6px 12px; font-size: 14px; cursor: pointer;
+  }
+  .cite-chip {
+    display: inline-block; font-size: 13px; font-weight: 700; color: var(--primary);
+    background: var(--accent-bg); border: 1px solid #c2d7ea; border-radius: 999px;
+    padding: 0 8px; margin: 0 2px; cursor: pointer; vertical-align: 1px;
+  }
+  .cite-chip:active { background: #dcebf7; }
+
+  /* ---- 原文檢視 modal ---- */
+  #doc-modal {
+    position: fixed; inset: 0; z-index: 50; display: none;
+    background: rgba(16, 32, 48, 0.55); padding: 24px 14px;
+  }
+  #doc-modal.open { display: flex; align-items: center; justify-content: center; }
+  .doc-panel {
+    background: #fff; border-radius: 14px; max-width: 720px; width: 100%;
+    max-height: 86vh; display: flex; flex-direction: column; overflow: hidden;
+    box-shadow: 0 24px 60px rgba(10, 25, 40, 0.35);
+  }
+  .doc-head {
+    padding: 14px 18px; border-bottom: 1px solid var(--line);
+    display: flex; align-items: flex-start; gap: 10px;
+  }
+  .doc-head .doc-title { flex: 1; font-weight: 700; color: var(--primary); font-size: 17px; line-height: 1.5; }
+  .doc-head .doc-close {
+    flex: 0 0 auto; border: none; background: #eef2f6; border-radius: 8px;
+    font-size: 16px; padding: 6px 12px; cursor: pointer; color: var(--text);
+  }
+  .doc-meta { padding: 10px 18px 0; display: flex; gap: 8px; flex-wrap: wrap; }
+  .doc-body {
+    padding: 12px 18px 18px; overflow-y: auto; font-size: 16px; line-height: 1.8;
+    white-space: pre-wrap; word-break: break-word; color: var(--text);
+  }
+  .doc-attach { padding: 0 18px 16px; }
+
   .typing { display: flex; gap: 4px; padding: 6px 0; }
   .typing span {
     width: 8px; height: 8px; border-radius: 50%; background: #999;
@@ -225,6 +268,18 @@
   </div>
 
   <footer>本系統由民政局建置｜回覆內容以紙本卷宗為準</footer>
+</div>
+
+<div id="doc-modal" role="dialog" aria-modal="true">
+  <div class="doc-panel">
+    <div class="doc-head">
+      <div class="doc-title" id="doc-title"></div>
+      <button class="doc-close" id="doc-close">✕ 關閉</button>
+    </div>
+    <div class="doc-meta" id="doc-meta"></div>
+    <div class="doc-body" id="doc-body"></div>
+    <div class="doc-attach" id="doc-attach"></div>
+  </div>
 </div>
 
 <script>
@@ -300,12 +355,50 @@
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
+  // ==== 出處人話化 ====
+  var TABLE_NAMES = {
+    '全動': '動員準備業務會報',
+    '精神': '精神動員準備',
+    '人力': '人力動員準備',
+    '物資': '物資經濟動員準備',
+    '交通': '交通動員準備',
+    '衛生': '衛生動員準備',
+    '科技': '科技動員準備',
+    '軍事': '軍事動員準備'
+  };
+
+  // 最近一次回答的出處資料，供引用晶片與 modal 使用
+  var sourceRegistry = {};
+
+  function friendlyName(id) {
+    var m = String(id || '').match(/^([^-]+)-0*(\d+)/);
+    if (!m) return String(id || '');
+    var table = TABLE_NAMES[m[1]] || m[1];
+    return table + '｜第' + Number(m[2]) + '項';
+  }
+
+  /** 模型偶爾殘留 Markdown 記號，介面不渲染 Markdown，先清掉 */
+  function cleanupMarkdown(text) {
+    return String(text || '')
+      .replace(/\*\*([^*\n]+)\*\*/g, '$1')
+      .replace(/^#{1,6}\s*/gm, '')
+      .replace(/^[ \t]*[\*\-•]\s+/gm, '‧ ')
+      .replace(/\n{3,}/g, '\n\n');
+  }
+
   function decorateInline(text) {
     var escaped = escapeHtml(text);
     escaped = escaped.replace(/（紙本頁碼[：:][^）]*）/g, function (m) {
       return '<span class="page-anchor">' + m.replace(/[（）]/g, '') + '</span>';
     });
-    escaped = escaped.replace(/【([^】]+)】/g, '<span class="tag">【$1】</span>');
+    escaped = escaped.replace(/【([^】｜|]+)(?:[｜|][^】]*)?】/g, function (m, id) {
+      id = id.trim();
+      if (sourceRegistry[id]) {
+        return '<span class="cite-chip" data-src-id="' + escapeHtml(id) + '">📄 '
+          + escapeHtml(friendlyName(id)) + '</span>';
+      }
+      return '<span class="tag">' + m + '</span>';
+    });
     return escaped;
   }
 
@@ -315,7 +408,7 @@
    * - 否則依段落分別包裝，避免一大塊文字雜在一起
    */
   function formatAnswerHtml(rawText) {
-    var lines = String(rawText || '').split(/\n+/).map(function (l) { return l.trim(); }).filter(Boolean);
+    var lines = cleanupMarkdown(rawText).split(/\n+/).map(function (l) { return l.trim(); }).filter(Boolean);
     if (!lines.length) return '';
     var sectionRe = /^(結論|依據|出處)[：:]\s*(.*)$/;
     var sections = [];
@@ -332,6 +425,66 @@
     }
     return plain.map(function (p) { return '<p class="answer-para">' + decorateInline(p) + '</p>'; }).join('');
   }
+
+  // ==== 原文檢視 modal ====
+  var docModal = document.getElementById('doc-modal');
+  var docTitle = document.getElementById('doc-title');
+  var docMeta = document.getElementById('doc-meta');
+  var docBody = document.getElementById('doc-body');
+  var docAttach = document.getElementById('doc-attach');
+
+  function openDocModal(src) {
+    if (!src) return;
+    docTitle.textContent = '📄 ' + friendlyName(src.id);
+    docMeta.innerHTML = '';
+    if (src.pageRef) {
+      var page = document.createElement('span');
+      page.className = 'src-page';
+      page.textContent = '紙本卷宗 ' + src.pageRef;
+      docMeta.appendChild(page);
+    }
+    if (src.bureau) {
+      var bureau = document.createElement('span');
+      bureau.className = 'src-bureau';
+      bureau.textContent = '主辦：' + src.bureau;
+      docMeta.appendChild(bureau);
+    }
+    var idNote = document.createElement('span');
+    idNote.className = 'src-bureau';
+    idNote.textContent = '項目代號 ' + src.id;
+    docMeta.appendChild(idNote);
+
+    var body = '';
+    if (src.title) body += '檢核重點：' + src.title + '\n\n';
+    body += src.fullText || '（本項原文未收錄於系統，請參閱紙本卷宗' + (src.pageRef ? ' ' + src.pageRef : '') + '）';
+    docBody.textContent = body;
+
+    docAttach.innerHTML = '';
+    (src.attachments || []).forEach(function (a) {
+      if (!a.url) return;
+      var btn = document.createElement('a');
+      btn.className = 'attach-btn';
+      btn.href = a.url;
+      btn.target = '_blank';
+      btn.rel = 'noopener noreferrer';
+      btn.textContent = '📎 ' + (a.name || '附件');
+      docAttach.appendChild(btn);
+    });
+    docModal.classList.add('open');
+  }
+
+  document.getElementById('doc-close').addEventListener('click', function () {
+    docModal.classList.remove('open');
+  });
+  docModal.addEventListener('click', function (e) {
+    if (e.target === docModal) docModal.classList.remove('open');
+  });
+
+  // 引用晶片：事件委派（回答氣泡是 innerHTML 動態產生）
+  document.addEventListener('click', function (e) {
+    var chip = e.target.closest ? e.target.closest('.cite-chip') : null;
+    if (chip) openDocModal(sourceRegistry[chip.getAttribute('data-src-id')]);
+  });
 
   function addUserBubble(text) {
     var row = document.createElement('div');
@@ -367,8 +520,14 @@
       head.className = 'src-head';
       var idBadge = document.createElement('span');
       idBadge.className = 'src-id';
-      idBadge.textContent = '📄 ' + s.id;
+      idBadge.textContent = '📄 ' + friendlyName(s.id);
       head.appendChild(idBadge);
+      if (s.pageRef) {
+        var page = document.createElement('span');
+        page.className = 'src-page';
+        page.textContent = '紙本 ' + s.pageRef;
+        head.appendChild(page);
+      }
       if (s.bureau) {
         var bureau = document.createElement('span');
         bureau.className = 'src-bureau';
@@ -381,6 +540,13 @@
         title.className = 'src-title';
         title.textContent = s.title;
         card.appendChild(title);
+      }
+      if (s.fullText) {
+        var viewBtn = document.createElement('button');
+        viewBtn.className = 'view-btn';
+        viewBtn.textContent = '🔎 查看原文';
+        viewBtn.addEventListener('click', function () { openDocModal(s); });
+        card.appendChild(viewBtn);
       }
       (s.attachments || []).forEach(function (a) {
         if (!a.url) return;
@@ -453,6 +619,8 @@
   }
 
   function renderAnswer(data) {
+    // 先登錄出處，讓回答內文的【出處】能轉成可點晶片
+    (data.sources || []).forEach(function (s) { sourceRegistry[s.id] = s; });
     var demoNotice = hasDemoSource(data.sources)
       ? '<span class="answer-badge demo">目前後端仍連到 DEMO 示範資料，請先匯入正式 Google Sheet 後再使用</span>'
       : '';
